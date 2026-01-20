@@ -1,60 +1,66 @@
-name: Create Tests and Run Pytest
+name: Unit Tests - Combined Router
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   pull_request:
-    branches: ["main"]
 
 jobs:
-  test:
+  unit-tests:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest fastapi uvicorn httpx
+          pip install fastapi uvicorn pytest httpx
 
-      - name: Find router file
-        run: |
-          echo "Searching combined_router.py..."
-          find . -type f -name "combined_router.py" -print
-
-      - name: Create test file automatically
+      - name: Find router and create unit test
         run: |
           mkdir -p tests/unit/routers
 
-          ROUTER_PATH=$(find . -type f -name "combined_router.py" | head -n 1)
+          # Find combined_router.py file
+          ROUTER_PATH=$(find . -name "combined_router.py" | head -n 1)
 
           if [ -z "$ROUTER_PATH" ]; then
-            echo "combined_router.py not found"
+            echo "combined_router.py not found!"
             exit 1
           fi
 
           echo "Found router file at: $ROUTER_PATH"
 
+          # Mapping for different project structures
           if echo "$ROUTER_PATH" | grep -q "^./api/lightbox_api/routers/combined_router.py$"; then
             IMPORT_LINE="from api.lightbox_api.routers.combined_router import router"
             PATCH_LINE="api.lightbox_api.routers.combined_router.combined_geocode_reverse_service"
+
           elif echo "$ROUTER_PATH" | grep -q "^./lightbox_api/routers/combined_router.py$"; then
             IMPORT_LINE="from lightbox_api.routers.combined_router import router"
             PATCH_LINE="lightbox_api.routers.combined_router.combined_geocode_reverse_service"
+
           elif echo "$ROUTER_PATH" | grep -q "^./src/lightbox_api/routers/combined_router.py$"; then
             IMPORT_LINE="from lightbox_api.routers.combined_router import router"
             PATCH_LINE="lightbox_api.routers.combined_router.combined_geocode_reverse_service"
+
+          elif echo "$ROUTER_PATH" | grep -q "^./combined_router.py$"; then
+            IMPORT_LINE="from combined_router import router"
+            PATCH_LINE="combined_router.combined_geocode_reverse_service"
+
           else
             echo "Unknown router location: $ROUTER_PATH"
             echo "Update YAML mapping for your folder structure."
             exit 1
           fi
 
+          # Create test file
           cat > tests/unit/routers/test_combined_router.py << EOF
           import pytest
           from fastapi import FastAPI
@@ -85,11 +91,8 @@ jobs:
                   mock_service.assert_called_once()
           EOF
 
-      - name: Run tests
+          echo "✅ Unit test created successfully!"
+
+      - name: Run Pytest
         run: |
-          if [ -d "src" ]; then
-            export PYTHONPATH=$(pwd)/src
-          else
-            export PYTHONPATH=$(pwd)
-          fi
-          pytest -q tests
+          pytest -v
